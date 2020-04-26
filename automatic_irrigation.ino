@@ -17,10 +17,9 @@ void step_controllers();
 
 void setup() {
     Serial.begin(9600);
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < number_of_sensors; i++) {
         controllers[i] = new IrrigationController(sensor1 + i, pump1 + i);
     }
-
     delay(500);
 }
 
@@ -36,13 +35,9 @@ void handle_irrigation() {
 }
 
 void step_controllers() {
-    controllers[0]->step();
-
-    /*
     for (auto & i : controllers) {
         i->step();
     }
-     */
 }
 
 // Handlers
