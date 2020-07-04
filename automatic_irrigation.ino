@@ -3,12 +3,17 @@
 
 #include <Arduino.h>
 
+// Pin for your first pump
 int pump1 = 2;
+
+// Pin for your first sensor
 int sensor1 = A0;
 
+
+// Configure the number of sensors, make sure there's a controller for each sensor
+int number_of_sensors = 4;
 IrrigationController *controllers[4];
 
-int number_of_sensors = 1;
 
 void handle_irrigation();
 void handle_serial();
@@ -16,8 +21,13 @@ void step_controllers();
 
 
 void setup() {
+    /*
+     * Sets the baud rate and intializes the IrrigationControllers for each pump/sensor pair
+     *
+     */
     Serial.begin(9600);
     for (int i = 0; i < number_of_sensors; i++) {
+        // Initialize a controller for each sensor
         controllers[i] = new IrrigationController(sensor1 + i, pump1 + i);
     }
     delay(500);
@@ -25,24 +35,56 @@ void setup() {
 
 
 void loop() {
+    /*
+     * The main Arduino loop
+     *    - run the irrigation step where we check thresholds, water plants, etc
+     *    - check to see if there are any pending commands issues via the serial port
+     *    - add a small delay so the loop isn't constantly firing
+     *
+     */
     handle_irrigation();
     handle_serial();
     delay(50);
 }
 
 void handle_irrigation() {
+    /*
+     * Thought this might end up doing more, but for now
+     * it just steps the controllers
+     *
+     */
     step_controllers();
 }
 
 void step_controllers() {
+    /*
+     * `step` each controller
+     * During a step the controller will check water thresholds and turn on/off water pumps
+     *
+     */
     for (auto & i : controllers) {
         i->step();
     }
 }
 
 // Handlers
+/*
+ * Below are all the command handlers for commands issues over the serial port.
+ * To get a better understanding of what's happening here go down to handle_serial,
+ * it has more information on how the commands are fetched, decoded, and issued.
+ *
+ * Most of the other handlers are self explanatory once you understand how commands work
+ *
+ */
 
 bool validate_target(RequestBundle* bundle, byte buf[4]) {
+    /*
+     * Applies validation to an incoming request
+     * For now it just verifies that the target pump for a command exists
+     *
+     * This will be called by any command that requires a target
+     *
+     */
     if (bundle->target > number_of_sensors - 1) {
         Encoder::encode(Response::INVALID_REQUEST, buf);
         return false;
@@ -51,6 +93,9 @@ bool validate_target(RequestBundle* bundle, byte buf[4]) {
 }
 
 void handle_ping(RequestBundle* bundle, byte buf[4]) {
+    /*
+     * Pong
+     */
     Encoder::encode(Response::PONG, buf);
 }
 
@@ -125,6 +170,13 @@ void handle_set_frequency(RequestBundle* bundle, byte buf[4]) {
 }
 
 unsigned long read_command() {
+   /*
+    * Each Serial.read() only returns 1 byte.
+    *
+    * We Serial.read() 4 times in order to grab all 4 bytes and store them
+    * into a byte array. We can then copy the byte array into an unsigned long
+    * in order to get the 32 bit integer that represents our command.
+    */
     unsigned char bytes[4] {
             (byte) Serial.read(),
             (byte) Serial.read(),
@@ -138,6 +190,22 @@ unsigned long read_command() {
 
 
 void handle_serial() {
+    /*
+     * Handle serial handles all Serial communication.
+     *
+     * 4 byte chunks are grabbed from the Serial port via the `read_command` which are converted
+     * to a long.
+     *
+     * The long is then translated to a RequestBundle by the client_library decoder to determine
+     * the command, target pump, and value associated with the command.
+     *
+     * We then just match the command in the bundle to a set of commands we know how to handle
+     * and call the associated handler for a given command. The handlers accept a 4 byte buffer
+     * which will store the commands response.
+     *
+     * Lastly, the 4 byte response is pushed to the Serial port and flushed.
+     *
+     */
     if (Serial.available() > 0) {
         unsigned long incoming = read_command();
         RequestBundle* bundle = Decoder::decode(incoming);
@@ -181,64 +249,7 @@ void handle_serial() {
         }
         Serial.write(buf, sizeof(buf));
         Serial.flush();
+        // clean up after yourself unless you want memory leaks
         delete bundle;
     }
 }
-
-
-/* Request
- * 0000 0000 0000 0000 0000 0000 0000 0000
- *
- * Possible requests
- * PING -> keep alive(zzzz is request tag)
- * 0000 0000 0000 0000 0000 0000 0000 0000
- *
- * GET_MOISTURE (xxxx is pump number, zzzz is request tag)
- * 0000 0001 0000 xxxx 0000 0000 0000 0000
- *
- * SET_THRESHOLD (xxxx is pump number, yyyy is u16, zzzz is request tag)
- * 0000 0010 0000 xxxx yyyy yyyy yyyy yyyy
- *
- * GET_PULSE_LENGTH (xxxx is pump number, zzzz is request tag)
- * 0000 0011 0000 xxxx 0000 0000 0000 0000
- *
- * SET_PULSE_LENGTH (xxxx is pump number, yyyy is u8, zzzz is request tag)
- * 0000 0100 0000 xxxx 0000 0000 yyyy yyyy
- *
- * GET_IS_RUNNING (xxxx is pump number, zzzz is request tag)
- * 0000 0101 0000 xxxx 0000 0000 0000 0000
- *
- * GET_THRESHOLD (xxxx is pump number, yyyy is u16, zzzz is request tag)
- * 0000 0110 0000 xxxx 0000 0000 0000 0000
- *
- * ENABLE (xxxx is pump number)
- * 0000 0111 0000 xxxx 0000 0000 0000 0000
- *
- * DISABLE (xxxx is pump number)
- * 0000 0111 0000 xxxx 0000 0000 0000 0000
- *
- * Response
- * 0000 0000 0000 0000 0000 0000 0000 0000
- *
- * Possible response
- * PONG -> keep alive
- * 0000 0000 0000 0000 0000 0000 0000 0000
- *
- * MOISTURE_RESPONSE (xxxx is pump number, yyyy is u16)
- * 0000 0001 0000 xxxx yyyy yyyy yyyy yyyy
- *
- * SET_THRESHOLD_RESPONSE (xxxx is pump number, b is boolean)
- * 0000 0010 0000 xxxx 0000 0000 0000 000b
- *
- * PULSE_LENGTH_RESPONSE (xxxx is pump number)
- * 0000 0011 0000 xxxx yyyy yyyy yyyy yyyy
- *
- * SET_PULSE_LENGTH_RESPONSE (xxxx is pump number, b is boolean)
- * 0000 0100 0000 xxxx 0000 0000 0000 000b
- *
- * GET_IS_RUNNING (xxxx is pump number, b is boolean)
- * 0000 0101 0000 xxxx 0000 0000 0000 000b
- *
- * INVALID_REQUEST
- * 1111 1111 0000 xxxx 0000 0000 0000 0000
- */
