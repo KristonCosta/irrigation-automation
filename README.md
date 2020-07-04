@@ -1,4 +1,4 @@
-##Irrigation Automation
+## Irrigation Automation
 
 ### What is this? 
 A simple controller that allows you to control water pumps via 
@@ -94,15 +94,15 @@ Right now the supported commands are:
 
 #### [Format] What's the structure for the 4 byte command?
 ```
-0000 0000 | 0000 0000 | 0000 0000 0000 0000
-^ first 8 bits describe the command, eg SET_THRESHOLD_RESPONSE would be 0000 0010
-            ^ second set of 8 bits describes the target, eg pump 3 would be 0000 0011
-                        ^ last 16 bits are used for the value (LE), eg 512 would be 0000 0000 0000 0002 
+ * 0000 0000 0000 0000 | 0000 0000 | 0000 0000
+ *                                   ^ last 8 bits describe the command, eg SET_THRESHOLD_RESPONSE would be 0000 0010
+ *                       ^ second set of 8 bits describes the target, eg pump 3 would be 0000 0011
+ * ^ first 16 bits are used for the value (LE), eg 512 would be 0000 0000 0000 0002 
 ```
 
 So for a `SET_THRESHOLD_RESPONSE` with a target of pump `3` and a value of `512` the bytes would end up being 
 ```
-0000 0010 0000 0011 0000 0000 0000 0002
+* 0000 0000 0000 0002 0000 0011 0000 0010
 ```
 
 #### Final Note
